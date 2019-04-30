@@ -66,17 +66,17 @@ let find' c m =
     begin
     match M.find_opt c m with
     | Some v -> v
-    | _ -> if List.length (explode c) > 1 then raise (Fail ("variable with more than 1 char: " ^ c)) else String.get c 0 |> Char.code
+    | _ -> if List.length (explode c) != 1 then raise (Fail ("variable with more than 1 char: " ^ c)) else String.get c 0 |> Char.code
     end
 
 let mk_node id nt str : int * int * int = 
   match nt with 
-  | N_VAR -> (id,0,String.get str 0 |> Char.code) 
+  | N_VAR -> if str = "" then raise (Fail "empty string") else (id,0,String.get str 0 |> Char.code) 
   | N_CONST -> (id,1,find' str (!constant_index))
   | N_COMB -> (id,2,1)
   | N_ABS -> (id,3,1)
-  | N_TYVAR -> (id,4,String.get str 0 |> Char.code) 
-  | N_TYAPP -> (id,5,String.get str 0 |> Char.code) 
+  | N_TYVAR -> if str = "" then raise (Fail "empty string") else (id,4,String.get str 0 |> Char.code) 
+  | N_TYAPP -> if str = "" then raise (Fail "empty string") else (id,5,find' str (!constant_index))
 
 let term_node (tm : term) : (((int * int * int) list) ref * (int * int * int) list ref -> unit) -> (int * node) option = fun cc ->
   let idx = ref 0 in
@@ -143,7 +143,7 @@ let term_node (tm : term) : (((int * int * int) list) ref * (int * int * int) li
       begin
     match ty with
       Tyvar(v) -> 
-      let em = if List.length (explode v) > 1 then raise (Fail ("type var with more than 1 char: " ^ v)) else String.get v 0 |> Char.code in
+      let em = if List.length (explode v) != 1 then raise (Fail ("type var with more than 1 char: " ^ v)) else String.get v 0 |> Char.code in
       let id' = !idx in 
       let r = ((id',Leaf(N_TYVAR, id', em))) in 
       let _ = nodes := (mk_node id' N_TYVAR v)::(!nodes) in 
@@ -196,7 +196,8 @@ let label content =
 
 type data = Train | Test
 
-let matrify index proof which =
+let matrify index proof which proof_index =
+  let _ = Printf.printf "here" in
   let goals, goals_nodes, meta, contexts, contexts_nodes, labels = 
     match which with
     | Train -> training_goals, training_goals_nodes, training_meta, training_contexts, training_contexts_nodes, training_labels
@@ -207,6 +208,7 @@ let matrify index proof which =
   let asl,tm = dest_thm thm in
   let _ = check_ctx asl in 
   let len = List.length asl in
+  let _ = Printf.printf "here" in
   let goal_cc = 
     fun (writes,nodes) ->
       List.iter (fun (i,j,k) -> Bigarray.Array3.set goals index i j (Int64.of_int k)) !writes;
@@ -217,6 +219,7 @@ let matrify index proof which =
     let _ = Printf.printf "goal succeeded" in 
     let _ = Bigarray.Array2.set meta index 0 (Int64.of_int len) in 
     let _ = Bigarray.Array2.set meta index 1 (Int64.of_int size) in 
+    let _ = Bigarray.Array2.set meta index 2 (Int64.of_int proof_index) in 
     let _ = Bigarray.Array2.set labels index (label content) (Int64.of_int 1) in 
     Some(
         List.iteri (fun l tm -> 
@@ -238,11 +241,14 @@ let gen_data n which =
   let num_succ = ref 0 in
   while !num_succ <  n do 
     let i = Random.int 12576083 in
-    let _ =  Printf.printf "%d" i in 
+    let _ =  Printf.printf "i: %d\n" i in 
+    let _ =  Printf.printf "#succ: %d\n" (!num_succ) in 
+    try
     let p = proof_at i in 
-    match matrify !num_succ p which with
+    match matrify !num_succ p which i with
     | Some () -> num_succ := !num_succ + 1
     | _ -> ()
+    with Not_found -> ()
   done
 
 
