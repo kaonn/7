@@ -197,7 +197,6 @@ let label content =
 type data = Train | Test
 
 let matrify index proof which proof_index =
-  let _ = Printf.printf "here" in
   let goals, goals_nodes, meta, contexts, contexts_nodes, labels = 
     match which with
     | Train -> training_goals, training_goals_nodes, training_meta, training_contexts, training_contexts_nodes, training_labels
@@ -208,7 +207,6 @@ let matrify index proof which proof_index =
   let asl,tm = dest_thm thm in
   let _ = check_ctx asl in 
   let len = List.length asl in
-  let _ = Printf.printf "here" in
   let goal_cc = 
     fun (writes,nodes) ->
       List.iter (fun (i,j,k) -> Bigarray.Array3.set goals index i j (Int64.of_int k)) !writes;

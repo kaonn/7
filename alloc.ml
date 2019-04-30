@@ -41,7 +41,6 @@ let test_meta =
   Bigarray.Array2.create Bigarray.Int64 Bigarray.C_layout nUM_TEST 3
 let test_labels =
   Bigarray.Array2.create Bigarray.Int64 Bigarray.C_layout nUM_TEST 13
-
 ;;
     Bigarray.Genarray.fill test_contexts (Int64.of_int (-1));
     Bigarray.Genarray.fill test_contexts_nodes (Int64.of_int (0));
