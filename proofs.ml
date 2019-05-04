@@ -5,8 +5,6 @@
 #load "unix.cma";;
 #load "str.cma";;
 #load "bigarray.cma";;
-#use "alloc.ml";;
-#use "write_arrays.ml";;
 
 (* ------------------------------------------------------------------------- *)
 (* Marshalling of term to AST-like.                                          *)
@@ -100,8 +98,8 @@ let mk_node id nt str fmt : int * int * int =
     | N_TYVAR -> if str = "" then raise (Fail "empty string") else (id,4,String.get str 0 |> Char.code) 
     | N_TYAPP -> if str = "" then raise (Fail "empty string") else (id,5,find' str (!constant_index))
     | N_CONST -> (id,1,find' str (!constant_index))
-    | N_COMB -> (id,2,1)
-    | N_ABS -> (id,3,1)
+    | N_COMB -> (id,2,2)
+    | N_ABS -> (id,3,3)
     end
   | BON -> 
     begin
@@ -194,7 +192,7 @@ let term_node (tm : term) (fmt : data_format) mnn : (((int * int * int) list) re
       let _ = idx := !idx + 1 in
       r
     | Tyapp(c,args) ->
-      let _ = if List.length args > 2 then raise (Fail ("max node size reached: " ^ (string_of_int !idx))) else () in
+      let _ = if List.length args > 2 then raise (Fail ("more than 2 apps: " ^ (string_of_int !idx))) else () in
       let res = List.map g args in 
       let idxs = List.map (fun (i,_) -> i) res in
       let childs = List.map (fun (_,c) -> c) res in 
@@ -238,40 +236,94 @@ let label content =
   | Pdef(tm,name,ty) -> 11
   | Pdeft(p1,tm,name,ty) -> 12
 
-type data_type = Train | Test
+let check_content content =
+  match content with
+    Prefl(tm) -> []
+  | Ptrans(p1,p2) -> 
+    let Proof(_,thm1,_) = p1 in 
+    let Proof(_,thm2,_) = p2 in 
+    let _ = check_ctx (hyp thm1); check_ctx (hyp thm2) in 
+    [p1;p2]
+  | Pmkcomb(p1,p2) -> 
+    let Proof(_,thm1,_) = p1 in 
+    let Proof(_,thm2,_) = p2 in 
+    let _ = check_ctx (hyp thm1); check_ctx (hyp thm2) in 
+    [p1;p2]
 
-let matrify index proof which fmt (dataref : (('a, 'b, 'c) data) ref) =
+  | Pabs(p1,tm) -> 
+    let Proof(_,thm1,_) = p1 in 
+    let _ = check_ctx (hyp thm1) in [p1]
+
+  | Pbeta(tm) -> []
+  | Passume(tm) -> []
+  | Peqmp(p1,p2) -> 
+    let Proof(_,thm1,_) = p1 in 
+    let Proof(_,thm2,_) = p2 in 
+    let _ = check_ctx (hyp thm1); check_ctx (hyp thm2) in 
+    [p1;p2]
+  | Pdeduct(p1,p2) -> 
+    let Proof(_,thm1,_) = p1 in 
+    let Proof(_,thm2,_) = p2 in 
+    let _ = check_ctx (hyp thm1); check_ctx (hyp thm2) in 
+    [p1;p2]
+  | Pinst(p1,insts) -> raise (Fail "cannot generate inst rules")
+  | Pinstt(p1,insts) -> raise (Fail "cannot generate inst rules") 
+  | Paxiom(tm) -> []
+  | Pdef(tm,name,ty) -> raise (Fail "cannot generate def rules")
+  | Pdeft(p1,tm,name,ty) -> raise (Fail "cannot generate def rules")
+
+type data_type = Train | Test | TrainPremise | TestPremise
+type prob = CL | GEN 
+
+let flip which = 
+  match which with 
+  | Train -> TrainPremise
+  | Test -> TestPremise
+
+let rec matrify index proof which fmt prob side (dataref : (('a, 'b, 'c) data) ref) =
   let data = !dataref in
   let mnn = data.mAX_NUM_NODES in
-  let goals, goals_nodes, meta, contexts, contexts_nodes, labels = 
+  let goals, goals_nodes, meta, contexts, contexts_nodes = 
     match which with
-    | Train -> data.train_goals, data.train_goals_n, data.train_meta, data.train_ctx, data.train_ctx_n, data.train_labels
-    | Test -> data.test_goals, data.test_goals_n, data.test_meta, data.test_ctx, data.test_ctx_n, data.test_labels
+    | Train -> data.train_goals, data.train_goals_n, data.train_meta, data.train_ctx, data.train_ctx_n
+    | Test -> data.test_goals, data.test_goals_n, data.test_meta, data.test_ctx, data.test_ctx_n
+    | TrainPremise -> data.train_premise_goals, data.train_premise_goals_n, data.train_premise_meta, data.train_premise_ctx, data.train_premise_ctx_n
+    | TestPremise-> data.test_premise_goals, data.test_premise_goals_n, data.test_premise_meta, data.test_premise_ctx, data.test_premise_ctx_n
   in
   try
   let Proof(idx,thm,content) = proof in
   let asl,tm = dest_thm thm in
   let _ = check_ctx asl in 
+  let _ =  
+    match prob with 
+    | GEN ->
+      let premises = check_content content in 
+      List.iteri (
+        fun i p -> let _ = matrify index p (flip which) OH CL i dataref in ()
+      ) premises
+    | _ -> () in 
   let len = List.length asl in
   let goal_cc = 
     match fmt with 
     | COMPACT -> 
       fun (writes,nodes) ->
-        List.iter (fun (i,j,k) -> Bigarray.Array3.set goals index i j k) !writes;
+        List.iter (fun (i,j,k) -> Bigarray.Genarray.set goals [|index; i; j|] k) !writes;
         List.iter (fun (i,j,k) -> Bigarray.Genarray.set goals_nodes [|index;i;j|] k) !nodes
     | OH -> 
         fun (writes,nodes) ->
-          List.iter (fun (i,j,k) -> Bigarray.Array3.set goals index i j k) !writes;
-          List.iter (fun (i,j,k) -> Bigarray.Genarray.set goals_nodes [|index; i; j|] k) !nodes
+          List.iter (fun (i,j,k) -> Bigarray.Genarray.set goals [|index; side; i; j|] k) !writes;
+          List.iter (fun (i,j,k) -> 
+              Bigarray.Genarray.set goals_nodes [|index; side; i; j|] 1;
+              Bigarray.Genarray.set goals_nodes [|index; side; i; k|] 1) !nodes
     | BON ->
         fun (writes,nodes) ->
           List.iter (fun (i,j,_) -> 
-              let n = Bigarray.Array3.get goals index i j in 
-              Bigarray.Array3.set goals index i j (n+1)
+              let n = Bigarray.Genarray.get goals [|index; i; j|] in 
+              Bigarray.Genarray.set goals [|index; i; j|] (n+1)
               ) !writes;
           List.iter (fun (_,j,k) -> 
               let n = Bigarray.Genarray.get goals_nodes [|index; j|] in 
-              let _ = Bigarray.Genarray.set goals_nodes [|index;j|] (n+1) in
+              let _ = Bigarray.Genarray.set goals_nodes [|index; j|] (n+1) in
               if k = -1 then ()
               else 
                 let m = Bigarray.Genarray.get goals_nodes [|index; k|] in 
@@ -280,9 +332,20 @@ let matrify index proof which fmt (dataref : (('a, 'b, 'c) data) ref) =
   in
     let size,_ = term_node tm fmt mnn goal_cc  in
     let _ = Printf.printf "goal succeeded" in 
-    let _ = Bigarray.Array2.set meta index 0 len in 
-    let _ = Bigarray.Array2.set meta index 1 size in 
-    let _ = Bigarray.Array2.set labels index (label content) 1 in 
+    let _ = 
+        match which with 
+          | Train -> 
+            Bigarray.Array2.set data.train_labels index (label content) 1;
+            Bigarray.Genarray.set meta [|index; 0|] len;
+            Bigarray.Genarray.set meta [|index; 1|] size
+          | Test -> 
+            Bigarray.Array2.set data.test_labels index (label content) 1;
+            Bigarray.Genarray.set meta [|index; 0|] len;
+            Bigarray.Genarray.set meta [|index; 1|] size
+          | _ -> 
+            Bigarray.Genarray.set meta [|index; side; 0|] len;
+            Bigarray.Genarray.set meta [|index; side; 1|] size
+      in
     let ctx_cc l = 
           match fmt with
           | COMPACT -> 
@@ -291,8 +354,10 @@ let matrify index proof which fmt (dataref : (('a, 'b, 'c) data) ref) =
               List.iter (fun (i,j,k) -> Bigarray.Genarray.set contexts_nodes [|index; l; i; j|] ( k)) !nodes 
           | OH -> 
             fun (writes,nodes) -> 
-              List.iter (fun (i,j,k) -> Bigarray.Genarray.set contexts [|index; l; i; j|] ( k)) !writes ;
-              List.iter (fun (i,j,k) -> Bigarray.Genarray.set contexts_nodes [|index; l; i; j|] ( k)) !nodes 
+              List.iter (fun (i,j,k) -> Bigarray.Genarray.set contexts [|index; side; l; i; j|] ( k)) !writes ;
+              List.iter (fun (i,j,k) -> 
+                  Bigarray.Genarray.set contexts_nodes [|index; side; l; i; j|] 1;
+                  Bigarray.Genarray.set contexts_nodes [|index; side; l; i; k|] 1) !nodes 
           | BON -> 
             fun (writes,nodes) -> 
               List.iter (fun (i,j,_) -> 
@@ -312,8 +377,9 @@ let matrify index proof which fmt (dataref : (('a, 'b, 'c) data) ref) =
         List.iteri (fun l tm -> 
         let _ =  Printf.printf "ctx\n" in
         let sizei,_ = term_node tm fmt mnn (ctx_cc l) in
-        let _ = Bigarray.Array2.set meta index (l + 1) sizei in 
-        ()
+        match which with 
+          | Train | Test -> Bigarray.Genarray.set meta [|index;(l + 1)|] sizei
+          | _ -> Bigarray.Genarray.set meta [|index;side;(l + 1)|] sizei
           ) asl
         )
   with (Fail msg) -> let _ = Printf.printf "%s\n" msg in None
@@ -336,7 +402,7 @@ let gen_data (fmt : data_format) =
         let _ =  Printf.printf "#succ: %d\n" (!num_succ) in 
         try
         let p = proof_at i in 
-        match matrify !num_succ p Train fmt (dataref) with
+        match matrify !num_succ p Train fmt CL (-1) (dataref) with
         | Some () -> num_succ := !num_succ + 1
         | _ -> ()
         with Not_found -> ()
@@ -352,7 +418,7 @@ let gen_data (fmt : data_format) =
         let _ =  Printf.printf "#succ: %d\n" (!num_succ) in 
         try
         let p = proof_at i in 
-        match matrify !num_succ p Test fmt dataref with
+        match matrify !num_succ p Test fmt CL (-1) dataref with
         | Some () -> num_succ := !num_succ + 1
         | _ -> ()
         with Not_found -> ()
