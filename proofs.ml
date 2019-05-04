@@ -5,6 +5,8 @@
 #load "unix.cma";;
 #load "str.cma";;
 #load "bigarray.cma";;
+#use "alloc.ml";;
+#use "write_arrays.ml";;
 
 (* ------------------------------------------------------------------------- *)
 (* Marshalling of term to AST-like.                                          *)
@@ -51,7 +53,13 @@ exception CONST
 exception TYPEVAR
 exception Fail of string
 
+
 module M = Map.Make(String)
+module IntS = Set.Make( 
+  struct
+    let compare = Pervasives.compare
+    type t = int
+  end)
     
 let constant_index = 
   let m = ref M.empty in
@@ -66,19 +74,55 @@ let find' c m =
     begin
     match M.find_opt c m with
     | Some v -> v
-    | _ -> if List.length (explode c) != 1 then raise (Fail ("variable with more than 1 char: " ^ c)) else String.get c 0 |> Char.code
+    | _ -> if List.length (explode c) != 1 then raise (Fail ("variable with more than 1 char: " ^ c)) else 
+        let code = String.get c 0 |> Char.code in 
+          if code > 25 then raise (Fail "not alphabetic")
+          else code
     end
 
-let mk_node id nt str : int * int * int = 
-  match nt with 
-  | N_VAR -> if str = "" then raise (Fail "empty string") else (id,0,String.get str 0 |> Char.code) 
-  | N_CONST -> (id,1,find' str (!constant_index))
-  | N_COMB -> (id,2,1)
-  | N_ABS -> (id,3,1)
-  | N_TYVAR -> if str = "" then raise (Fail "empty string") else (id,4,String.get str 0 |> Char.code) 
-  | N_TYAPP -> if str = "" then raise (Fail "empty string") else (id,5,find' str (!constant_index))
+(* (node index, category, char occurence) *)
+let mk_node id nt str fmt : int * int * int = 
+  match fmt with 
+  | COMPACT -> 
+    begin
+    match nt with 
+    | N_VAR -> if str = "" then raise (Fail "empty string") else (id,0,String.get str 0 |> Char.code) 
+    | N_TYVAR -> if str = "" then raise (Fail "empty string") else (id,4,String.get str 0 |> Char.code) 
+    | N_TYAPP -> if str = "" then raise (Fail "empty string") else (id,5,find' str (!constant_index))
+    | N_CONST -> (id,1,find' str (!constant_index))
+    | N_COMB -> (id,2,1)
+    | N_ABS -> (id,3,1)
+    end
+  | OH -> 
+    begin
+    match nt with 
+    | N_VAR -> if str = "" then raise (Fail "empty string") else (id,0,String.get str 0 |> Char.code) 
+    | N_TYVAR -> if str = "" then raise (Fail "empty string") else (id,4,String.get str 0 |> Char.code) 
+    | N_TYAPP -> if str = "" then raise (Fail "empty string") else (id,5,find' str (!constant_index))
+    | N_CONST -> (id,1,find' str (!constant_index))
+    | N_COMB -> (id,2,1)
+    | N_ABS -> (id,3,1)
+    end
+  | BON -> 
+    begin
+    match nt with 
+    | N_VAR -> if str = "" then raise (Fail "empty string") else (id,0,(String.get str 0 |> Char.code) + 6) 
+    | N_TYVAR -> if str = "" then raise (Fail "empty string") else (id,4,(String.get str 0 |> Char.code) + 6) 
+    | N_TYAPP -> if str = "" then raise (Fail "empty string") else (id,5,(find' str (!constant_index)) + 32)
+    | N_CONST -> (id,1,(find' str (!constant_index)) + 32)
+    | N_COMB -> (id,2,-1)
+    | N_ABS -> (id,3,-1)
+  end
 
-let term_node (tm : term) : (((int * int * int) list) ref * (int * int * int) list ref -> unit) -> (int * node) option = fun cc ->
+let mk_write : (int * int * int) -> data_format -> (int * int * int) list = 
+  fun (id',c,id) ->
+    function
+   COMPACT -> [(id',c,id)]
+    | OH -> [(id',id,1);(id,id',1)]
+    | BON -> [(id',id,1);(id,id',1)]
+
+;;
+let term_node (tm : term) (fmt : data_format) mnn : (((int * int * int) list) ref * (int * int * int) list ref -> unit) -> (int * node) = fun cc ->
   let idx = ref 0 in
   let dlevel = ref 0 in
   let dbind = ref M.empty in
@@ -93,7 +137,7 @@ let term_node (tm : term) : (((int * int * int) list) ref * (int * int * int) li
   in
 
   let rec f tm : int * node = 
-    if !idx >= mAX_NUM_NODES then raise (Fail ("max node size reached: " ^ (string_of_int !idx)))
+    if !idx >= mnn then raise (Fail ("max node size reached: " ^ (string_of_int !idx)))
     else
       begin
     match tm with
@@ -101,16 +145,16 @@ let term_node (tm : term) : (((int * int * int) list) ref * (int * int * int) li
       let id,child = g ty in 
       let id' = !idx in 
       let r = (id',Single (N_VAR, id', find' v m, child)) in
-      let _ = writes := (id',0,id)::(!writes) in
-      let _ = nodes := (mk_node id' N_VAR v)::(!nodes) in 
+      let _ = writes := List.append(mk_write (id',0,id) fmt) (!writes) in
+      let _ = nodes := (mk_node id' N_VAR v fmt)::(!nodes) in 
       let _ = idx := !idx + 1 in 
       r
     | Const(c,ty) -> 
       let (id,child) = g ty in 
       let id' = !idx in 
       let r = (id',Single (N_CONST, id', find' c m, child)) in
-      let _ = writes := (id',0,id)::(!writes) in
-      let _ = nodes := (mk_node id' N_CONST c)::(!nodes) in 
+      let _ = writes := List.append (mk_write (id',0,id) fmt) (!writes) in
+      let _ = nodes := (mk_node id' N_CONST c fmt)::(!nodes) in 
       let _ = idx := !idx + 1 in
       r
     | Comb(t1,t2) -> 
@@ -118,8 +162,8 @@ let term_node (tm : term) : (((int * int * int) list) ref * (int * int * int) li
       let id2,c2 = f t2 in 
       let id' = !idx in 
       let r = id',Node(N_COMB, id', c1, c2) in
-      let _ = writes := (id',0,id1)::(id',1,id2)::(!writes) in
-      let _ = nodes := (mk_node id' N_COMB "")::(!nodes) in 
+      let _ = writes := List.concat [mk_write (id',0,id1) fmt; mk_write (id',1,id2) fmt; (!writes)] in
+      let _ = nodes := (mk_node id' N_COMB "" fmt)::(!nodes) in 
       let _ = idx := !idx + 1 in
       r
    | Abs(t1,t2) -> 
@@ -130,15 +174,15 @@ let term_node (tm : term) : (((int * int * int) list) ref * (int * int * int) li
       let (id2,c2) = f t2 in 
       let id' = !idx in 
       let r = (id',Node(N_ABS, id',c1, c2)) in
-      let _ = writes := (id',0,id1)::(id',1,id2)::(!writes) in
-      let _ = nodes := (mk_node id' N_ABS "")::(!nodes) in 
+      let _ = writes := List.concat [mk_write (id',0,id1) fmt; mk_write (id',1,id2) fmt; (!writes)] in
+      let _ = nodes := (mk_node id' N_ABS "" fmt)::(!nodes) in 
       let _ = idx := !idx + 1 in
       let _ = dlevel := !dlevel - 1 in
       r
     end
 
   and g ty = 
-    if !idx >= mAX_NUM_NODES then raise (Fail ("max node size reached: " ^ (string_of_int !idx)) )
+    if !idx >= mnn then raise (Fail ("max node size reached: " ^ (string_of_int !idx)) )
     else
       begin
     match ty with
@@ -146,7 +190,7 @@ let term_node (tm : term) : (((int * int * int) list) ref * (int * int * int) li
       let em = if List.length (explode v) != 1 then raise (Fail ("type var with more than 1 char: " ^ v)) else String.get v 0 |> Char.code in
       let id' = !idx in 
       let r = ((id',Leaf(N_TYVAR, id', em))) in 
-      let _ = nodes := (mk_node id' N_TYVAR v)::(!nodes) in 
+      let _ = nodes := (mk_node id' N_TYVAR v fmt)::(!nodes) in 
       let _ = idx := !idx + 1 in
       r
     | Tyapp(c,args) ->
@@ -159,23 +203,23 @@ let term_node (tm : term) : (((int * int * int) list) ref * (int * int * int) li
       let _ = 
         match idxs with 
         | [] -> () 
-        | [id] -> writes := (id',1,id)::(!writes) 
-        | [id1;id2] -> writes := (id',0,id1)::(id',1,id2)::(!writes) 
+        | [id] -> writes := List.append (mk_write (id',0,id) fmt) (!writes) 
+        | [id1;id2] -> writes := List.concat [mk_write (id',0,id1) fmt; mk_write (id',1,id2) fmt; (!writes)]
       in
-      let _ = nodes := (mk_node id' N_TYAPP c)::(!nodes) in 
+      let _ = nodes := (mk_node id' N_TYAPP c fmt)::(!nodes) in 
       let _ = idx := !idx + 1 in
       r
     end
      in 
 
      let size,tmn = f tm in 
-     if size >= mAX_NUM_NODES then raise (Fail ("max node size reached: " ^ (string_of_int size)) ) else
+     if size >= mnn then raise (Fail ("max node size reached: " ^ (string_of_int size)) ) else
      let _ = cc (writes,nodes) in
-     Some (size,tmn)
+     (size,tmn)
 ;;
 
 let check_ctx ctx = 
-  if List.length ctx > mAX_CONTEXT_LEN then raise (Fail "context too big") 
+  if List.length ctx > 5 then raise (Fail "context too big") 
   else ()
 
 let label content =
@@ -194,13 +238,15 @@ let label content =
   | Pdef(tm,name,ty) -> 11
   | Pdeft(p1,tm,name,ty) -> 12
 
-type data = Train | Test
+type data_type = Train | Test
 
-let matrify index proof which proof_index =
+let matrify index proof which fmt (dataref : (('a, 'b, 'c) data) ref) =
+  let data = !dataref in
+  let mnn = data.mAX_NUM_NODES in
   let goals, goals_nodes, meta, contexts, contexts_nodes, labels = 
     match which with
-    | Train -> training_goals, training_goals_nodes, training_meta, training_contexts, training_contexts_nodes, training_labels
-    | Test -> test_goals, test_goals_nodes, test_meta, test_contexts, test_contexts_nodes, test_labels
+    | Train -> data.train_goals, data.train_goals_n, data.train_meta, data.train_ctx, data.train_ctx_n, data.train_labels
+    | Test -> data.test_goals, data.test_goals_n, data.test_meta, data.test_ctx, data.test_ctx_n, data.test_labels
   in
   try
   let Proof(idx,thm,content) = proof in
@@ -208,47 +254,111 @@ let matrify index proof which proof_index =
   let _ = check_ctx asl in 
   let len = List.length asl in
   let goal_cc = 
-    fun (writes,nodes) ->
-      List.iter (fun (i,j,k) -> Bigarray.Array3.set goals index i j (Int64.of_int k)) !writes;
-      List.iter (fun (i,j,k) -> Bigarray.Array3.set goals_nodes index i j (Int64.of_int k)) !nodes
+    match fmt with 
+    | COMPACT -> 
+      fun (writes,nodes) ->
+        List.iter (fun (i,j,k) -> Bigarray.Array3.set goals index i j k) !writes;
+        List.iter (fun (i,j,k) -> Bigarray.Genarray.set goals_nodes [|index;i;j|] k) !nodes
+    | OH -> 
+        fun (writes,nodes) ->
+          List.iter (fun (i,j,k) -> Bigarray.Array3.set goals index i j k) !writes;
+          List.iter (fun (i,j,k) -> Bigarray.Genarray.set goals_nodes [|index; i; j|] k) !nodes
+    | BON ->
+        fun (writes,nodes) ->
+          List.iter (fun (i,j,_) -> 
+              let n = Bigarray.Array3.get goals index i j in 
+              Bigarray.Array3.set goals index i j (n+1)
+              ) !writes;
+          List.iter (fun (_,j,k) -> 
+              let n = Bigarray.Genarray.get goals_nodes [|index; j|] in 
+              let _ = Bigarray.Genarray.set goals_nodes [|index;j|] (n+1) in
+              if k = -1 then ()
+              else 
+                let m = Bigarray.Genarray.get goals_nodes [|index; k|] in 
+                Bigarray.Genarray.set goals_nodes [|index;k|] (m+1) ) (!nodes)
+
   in
-  match term_node tm goal_cc  with 
-  | Some (size,_) ->  
+    let size,_ = term_node tm fmt mnn goal_cc  in
     let _ = Printf.printf "goal succeeded" in 
-    let _ = Bigarray.Array2.set meta index 0 (Int64.of_int len) in 
-    let _ = Bigarray.Array2.set meta index 1 (Int64.of_int size) in 
-    let _ = Bigarray.Array2.set meta index 2 (Int64.of_int proof_index) in 
-    let _ = Bigarray.Array2.set labels index (label content) (Int64.of_int 1) in 
-    Some(
+    let _ = Bigarray.Array2.set meta index 0 len in 
+    let _ = Bigarray.Array2.set meta index 1 size in 
+    let _ = Bigarray.Array2.set labels index (label content) 1 in 
+    let ctx_cc l = 
+          match fmt with
+          | COMPACT -> 
+            fun (writes,nodes) -> 
+              List.iter (fun (i,j,k) -> Bigarray.Genarray.set contexts [|index; l; i; j|] (k)) !writes ;
+              List.iter (fun (i,j,k) -> Bigarray.Genarray.set contexts_nodes [|index; l; i; j|] ( k)) !nodes 
+          | OH -> 
+            fun (writes,nodes) -> 
+              List.iter (fun (i,j,k) -> Bigarray.Genarray.set contexts [|index; l; i; j|] ( k)) !writes ;
+              List.iter (fun (i,j,k) -> Bigarray.Genarray.set contexts_nodes [|index; l; i; j|] ( k)) !nodes 
+          | BON -> 
+            fun (writes,nodes) -> 
+              List.iter (fun (i,j,_) -> 
+                  let n = Bigarray.Genarray.get contexts [|index; i; j|] in 
+                  Bigarray.Genarray.set contexts [|index; i; j|] (n+1) 
+                ) !writes ;
+              List.iter (fun (_,j,k) -> 
+                  let n = Bigarray.Genarray.get goals_nodes [|index; j|] in 
+                  let _ = Bigarray.Genarray.set goals_nodes [|index;j|] (n+1) in
+                  if k = -1 then ()
+                  else 
+                    let m = Bigarray.Genarray.get goals_nodes [|index; k|] in 
+                    Bigarray.Genarray.set goals_nodes [|index;k|] (m+1) 
+                        ) !nodes 
+        in
+      Some(
         List.iteri (fun l tm -> 
         let _ =  Printf.printf "ctx\n" in
-        let ctx_cc = 
-          fun (writes,nodes) -> 
-            List.iter (fun (i,j,k) -> Bigarray.Genarray.set contexts [|index; l; i; j|] (Int64.of_int k)) !writes ;
-            List.iter (fun (i,j,k) -> Bigarray.Genarray.set contexts_nodes [|index; l; i; j|] (Int64.of_int k)) !nodes 
-        in
-        let _ = term_node tm ctx_cc in ()) asl
-      )
-  | None -> let _ = Printf.printf "goal failed" in None
+        let sizei,_ = term_node tm fmt mnn (ctx_cc l) in
+        let _ = Bigarray.Array2.set meta index (l + 1) sizei in 
+        ()
+          ) asl
+        )
   with (Fail msg) -> let _ = Printf.printf "%s\n" msg in None
      | Not_found ->  let _ = Printf.printf "fdaa" in None
 
 
-let gen_data n which = 
+let gen_data (fmt : data_format) = 
   let _ = Random.init 0 in
   let num_succ = ref 0 in
-  while !num_succ <  n do 
-    let i = Random.int 12576083 in
-    let _ =  Printf.printf "i: %d\n" i in 
-    let _ =  Printf.printf "#succ: %d\n" (!num_succ) in 
-    try
-    let p = proof_at i in 
-    match matrify !num_succ p which i with
-    | Some () -> num_succ := !num_succ + 1
-    | _ -> ()
-    with Not_found -> ()
-  done
-
+  let dataref = ref (alloc fmt) in
+  let n = (!dataref).nUM_TRAINING in 
+  let m = (!dataref).nUM_TEST in 
+  let seen = ref IntS.empty in
+    while !num_succ <  n do 
+      let i = Random.int 12576083 in
+      if IntS.mem i !seen then () 
+      else 
+        let _ = seen := IntS.add i (!seen) in
+        let _ =  Printf.printf "i: %d\n" i in 
+        let _ =  Printf.printf "#succ: %d\n" (!num_succ) in 
+        try
+        let p = proof_at i in 
+        match matrify !num_succ p Train fmt (dataref) with
+        | Some () -> num_succ := !num_succ + 1
+        | _ -> ()
+        with Not_found -> ()
+    done
+  ;
+    num_succ := 0;
+    while !num_succ <  m do 
+      let i = Random.int 12576083 in
+      if IntS.mem i !seen then () 
+      else 
+        let _ = seen := IntS.add i (!seen) in
+        let _ =  Printf.printf "i: %d\n" i in 
+        let _ =  Printf.printf "#succ: %d\n" (!num_succ) in 
+        try
+        let p = proof_at i in 
+        match matrify !num_succ p Test fmt dataref with
+        | Some () -> num_succ := !num_succ + 1
+        | _ -> ()
+        with Not_found -> ()
+    done
+  ;
+  write_arrays (!dataref) fmt
 
 (* ------------------------------------------------------------------------- *)
 (* Marshalling of proof to JSON parts.                                       *)
