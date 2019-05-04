@@ -211,9 +211,9 @@ let term_node (tm : term) (fmt : data_format) mnn : (((int * int * int) list) re
      in 
 
      let size,tmn = f tm in 
-     if size >= mnn then raise (Fail ("max node size reached: " ^ (string_of_int size)) ) else
+     if size+1 >= mnn then raise (Fail ("max node size reached: " ^ (string_of_int size)) ) else
      let _ = cc (writes,nodes) in
-     (size,tmn)
+     (size+1,tmn)
 ;;
 
 let check_ctx ctx = 
@@ -365,12 +365,12 @@ let rec matrify index proof which fmt prob side (dataref : (('a, 'b, 'c) data) r
                   Bigarray.Genarray.set contexts [|index; i; j|] (n+1) 
                 ) !writes ;
               List.iter (fun (_,j,k) -> 
-                  let n = Bigarray.Genarray.get goals_nodes [|index; j|] in 
-                  let _ = Bigarray.Genarray.set goals_nodes [|index;j|] (n+1) in
+                  let n = Bigarray.Genarray.get contexts_nodes [|index; j|] in 
+                  let _ = Bigarray.Genarray.set contexts_nodes [|index;j|] (n+1) in
                   if k = -1 then ()
                   else 
-                    let m = Bigarray.Genarray.get goals_nodes [|index; k|] in 
-                    Bigarray.Genarray.set goals_nodes [|index;k|] (m+1) 
+                    let m = Bigarray.Genarray.get contexts_nodes [|index; k|] in 
+                    Bigarray.Genarray.set contexts_nodes [|index;k|] (m+1) 
                         ) !nodes 
         in
       Some(
@@ -378,13 +378,12 @@ let rec matrify index proof which fmt prob side (dataref : (('a, 'b, 'c) data) r
         let _ =  Printf.printf "ctx\n" in
         let sizei,_ = term_node tm fmt mnn (ctx_cc l) in
         match which with 
-          | Train | Test -> Bigarray.Genarray.set meta [|index;(l + 1)|] sizei
-          | _ -> Bigarray.Genarray.set meta [|index;side;(l + 1)|] sizei
+          | Train | Test -> Bigarray.Genarray.set meta [|index;(l + 2)|] sizei
+          | _ -> Bigarray.Genarray.set meta [|index;side;(l + 2)|] sizei
           ) asl
         )
   with (Fail msg) -> let _ = Printf.printf "%s\n" msg in None
      | Not_found ->  let _ = Printf.printf "fdaa" in None
-
 
 let gen_data (fmt : data_format) = 
   let _ = Random.init 0 in
@@ -402,7 +401,7 @@ let gen_data (fmt : data_format) =
         let _ =  Printf.printf "#succ: %d\n" (!num_succ) in 
         try
         let p = proof_at i in 
-        match matrify !num_succ p Train fmt CL (-1) (dataref) with
+        match matrify !num_succ p Train fmt GEN (-1) (dataref) with
         | Some () -> num_succ := !num_succ + 1
         | _ -> ()
         with Not_found -> ()
@@ -418,7 +417,7 @@ let gen_data (fmt : data_format) =
         let _ =  Printf.printf "#succ: %d\n" (!num_succ) in 
         try
         let p = proof_at i in 
-        match matrify !num_succ p Test fmt CL (-1) dataref with
+        match matrify !num_succ p Test fmt GEN (-1) dataref with
         | Some () -> num_succ := !num_succ + 1
         | _ -> ()
         with Not_found -> ()
