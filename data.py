@@ -58,14 +58,14 @@ Ct = ginput(goals_test, goalsn_test)
 Pt = gpremise(premise_goals_test, premise_goalsn_test, 0)
 
 def data_for_rule(r, G, C, P, y):
-    Gn = zeros_like(P)
-    Cn = zeros_like(P)
+    Gn = zeros_like(G)
+    Cn = zeros_like(C)
     Pn = zeros_like(P)
     j = 0
     for i in range(Gn.shape[0]):
         if array_equal(y[i], r):
-            Gn[j][:G[i].shape[1]] = G[i]
-            Cn[j][:C[i].shape[1]] = C[i]
+            Gn[j] = G[i]
+            Cn[j] = C[i]
             Pn[j]  = P[i]
             j += 1
     return Gn[:j+1], Cn[:j+1], Pn[:j+1]
