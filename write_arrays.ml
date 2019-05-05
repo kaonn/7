@@ -50,9 +50,21 @@ let write_arrays data fmt =
     Npy.write data.train_meta "Data/oh_train_meta.npz";
     Npy.write2 data.train_labels "Data/oh_train_labels.npz";
 
+    Npy.write data.train_premise_ctx "Data/oh_train_premise_ctxs.npz";
+    Npy.write data.train_premise_ctx_n "Data/oh_train_premise_ctxs_n.npz";
+    Npy.write data.train_premise_goals "Data/oh_train_premise_goals.npz";
+    Npy.write data.train_premise_goals_n "Data/oh_train_premise_goals_n.npz";
+    Npy.write data.train_premise_meta "Data/oh_train_premise_meta.npz";
+
     Npy.write data.test_ctx "Data/oh_test_ctxs.npz";
     Npy.write data.test_ctx_n "Data/oh_test_ctxs_n.npz";
     Npy.write data.test_goals "Data/oh_test_goals.npz";
     Npy.write data.test_goals_n "Data/oh_test_goals_n.npz";
     Npy.write data.test_meta "Data/oh_test_meta.npz";
     Npy.write2 data.test_labels "Data/oh_test_labels.npz";
+
+    Npy.write data.test_premise_ctx "Data/oh_test_premise_ctxs.npz";
+    Npy.write data.test_premise_ctx_n "Data/oh_test_premise_ctxs_n.npz";
+    Npy.write data.test_premise_goals "Data/oh_test_premise_goals.npz";
+    Npy.write data.test_premise_goals_n "Data/oh_test_premise_goals_n.npz";
+    Npy.write data.test_premise_meta "Data/oh_test_premise_meta.npz";

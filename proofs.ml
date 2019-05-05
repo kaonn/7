@@ -311,10 +311,21 @@ let rec matrify index proof which fmt prob side (dataref : (('a, 'b, 'c) data) r
         List.iter (fun (i,j,k) -> Bigarray.Genarray.set goals_nodes [|index;i;j|] k) !nodes
     | OH -> 
         fun (writes,nodes) ->
-          List.iter (fun (i,j,k) -> Bigarray.Genarray.set goals [|index; side; i; j|] k) !writes;
           List.iter (fun (i,j,k) -> 
+              match which with 
+              | Test | Train -> 
+              Bigarray.Genarray.set goals [|index; i; j|] k
+              | _ -> 
+              Bigarray.Genarray.set goals [|index; side; i; j|] k) !writes;
+          List.iter (fun (i,j,k) -> 
+              match which with 
+              | Test | Train -> 
+              Bigarray.Genarray.set goals_nodes [|index; i; j|] 1;
+              Bigarray.Genarray.set goals_nodes [|index; i; k|] 1
+              | _ -> 
               Bigarray.Genarray.set goals_nodes [|index; side; i; j|] 1;
-              Bigarray.Genarray.set goals_nodes [|index; side; i; k|] 1) !nodes
+              Bigarray.Genarray.set goals_nodes [|index; side; i; k|] 1
+            ) !nodes
     | BON ->
         fun (writes,nodes) ->
           List.iter (fun (i,j,_) -> 
@@ -335,10 +346,12 @@ let rec matrify index proof which fmt prob side (dataref : (('a, 'b, 'c) data) r
     let _ = 
         match which with 
           | Train -> 
+            List.iter (fun i -> Bigarray.Array2.set data.train_labels index i 0) [0;1;2;3;4;5;6;7;8;9;10;11;12];
             Bigarray.Array2.set data.train_labels index (label content) 1;
             Bigarray.Genarray.set meta [|index; 0|] len;
             Bigarray.Genarray.set meta [|index; 1|] size
           | Test -> 
+            List.iter (fun i -> Bigarray.Array2.set data.test_labels index i 0) [0;1;2;3;4;5;6;7;8;9;10;11;12];
             Bigarray.Array2.set data.test_labels index (label content) 1;
             Bigarray.Genarray.set meta [|index; 0|] len;
             Bigarray.Genarray.set meta [|index; 1|] size
@@ -353,11 +366,23 @@ let rec matrify index proof which fmt prob side (dataref : (('a, 'b, 'c) data) r
               List.iter (fun (i,j,k) -> Bigarray.Genarray.set contexts [|index; l; i; j|] (k)) !writes ;
               List.iter (fun (i,j,k) -> Bigarray.Genarray.set contexts_nodes [|index; l; i; j|] ( k)) !nodes 
           | OH -> 
-            fun (writes,nodes) -> 
-              List.iter (fun (i,j,k) -> Bigarray.Genarray.set contexts [|index; side; l; i; j|] ( k)) !writes ;
+            fun (writes,nodes) ->
               List.iter (fun (i,j,k) -> 
-                  Bigarray.Genarray.set contexts_nodes [|index; side; l; i; j|] 1;
-                  Bigarray.Genarray.set contexts_nodes [|index; side; l; i; k|] 1) !nodes 
+                  match which with 
+                  | Test | Train -> 
+                    Bigarray.Genarray.set contexts [|index; l; i; j|] k
+                  | _ -> 
+                    Bigarray.Genarray.set contexts [|index; side; l; i; j|] k) !writes;
+              List.iter (fun (i,j,k) -> 
+                  match which with 
+                  | Test | Train -> 
+                    Bigarray.Genarray.set contexts_nodes [|index; l; i; j|] 1;
+                    Bigarray.Genarray.set contexts_nodes [|index; l; i; k|] 1
+                  | _ -> 
+                    Bigarray.Genarray.set contexts_nodes [|index; side; l; i; j|] 1;
+                    Bigarray.Genarray.set contexts_nodes [|index; side; l; i; k|] 1
+                ) !nodes
+
           | BON -> 
             fun (writes,nodes) -> 
               List.iter (fun (i,j,_) -> 
@@ -388,7 +413,7 @@ let rec matrify index proof which fmt prob side (dataref : (('a, 'b, 'c) data) r
 let gen_data (fmt : data_format) = 
   let _ = Random.init 0 in
   let num_succ = ref 0 in
-  let dataref = ref (alloc fmt) in
+  let dataref = ref (alloc fmt false) in
   let n = (!dataref).nUM_TRAINING in 
   let m = (!dataref).nUM_TEST in 
   let seen = ref IntS.empty in
