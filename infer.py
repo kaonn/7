@@ -1,6 +1,6 @@
 import pymc3 as pm
 from numpy import zeros, ones, random, identity, exp
-from data import Gd, Cd, Pd, y, data_for_rule
+from data import Gd, Cd, Pd, y, Gt, Ct, Pt, yt, data_for_rule
 
 m = 2
 
@@ -22,8 +22,9 @@ def make_model(Gd, Cd, *P):
         for i, Pi in enumerate(P):
             beta_i = UnitMvNormal(m)('beta {}'.format(i), mu=zeros(m), cov=identity(m), shape=m)
 
-            UnitMvNormal(n)('premise {}'.format(i), mu=beta_i[0] * Gamma + beta_i[1] * C, \
+            pm.MvNormal('premise {}'.format(i), mu=beta_i[0] * Gamma + beta_i[1] * C, \
                         cov=identity(n), shape=n, observed=Pi)
+            #pm.Potential("bound", tt.switch((beta_i[0] > 0)*(beta_i[1] > 0), _, -np.inf))
 
         return model
 
