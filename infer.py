@@ -45,16 +45,17 @@ RULE = zeros((13,))
 RULE[1] = 1
 Gd, Cd, Pd = data_for_rule(RULE, Gd, Cd, Pd, y)
 Gt, Ct, Pt = data_for_rule(RULE, Gt, Ct, Pt, yt)
+M1 = min(Gd.shape[0], 1000)
+N1 = min(Gd.shape[1], 10000)
+M2 = min(Gt.shape[0], 1000)
+N2 = min(Gt.shape[1], 10000)
 
-M = 10
-N = 10
-
-Gd = Gd[:M,:N]
-Cd = Cd[:M,:N]
-Pd = Pd[:M,:N]
-Gt = Gt[:M,:N]
-Ct = Ct[:M,:N]
-Pt = Pt[:M,:N]
+Gd = Gd[:M1,:N1]
+Cd = Cd[:M1,:N1]
+Pd = Pd[:M1,:N1]
+Gt = Gt[:M2,:N2]
+Ct = Ct[:M2,:N2]
+Pt = Pt[:M2,:N2]
 
 with make_model(Gd, Cd, Pd):
     # Solve the MAP estimate
@@ -64,8 +65,8 @@ with make_model(Gd, Cd, Pd):
     # Sample from the conditional on P_i, take average loss across one test point, then across entire hold out set
     # TODO sample from this distribution and visualize it in TSNE versus an actual data point
     avg = 0
-    for i in range(M):
+    for i in range(M2):
         n, = Pt[i].shape
         avg += exp(UMvNormal_logp(Pt[i], beta[0] * Gt[i] + beta[1] * Ct[i], identity(n)))
 
-    print("Avg likelihood: {}".format(avg / M))
+    print("Avg likelihood: {}".format(avg / M2))
