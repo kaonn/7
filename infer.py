@@ -33,9 +33,11 @@ ABS[3] = 1
 Gd, Cd, Pd = data_for_rule(ABS, Gd, Cd, Pd, y)
 Gt, Ct, Pt = data_for_rule(ABS, Gt, Ct, Pt, yt)
 
-N = 2000
+N = 10
 
-with make_model(Gd, Cd, Pd):
+import theano as tt
+
+with make_model(Gd[:N,:N], Cd[:N,:N], Pd[:N,:N]):
     # Solve the MAP estimate
     params = pm.find_MAP()
     beta = params['beta 0']
@@ -43,9 +45,9 @@ with make_model(Gd, Cd, Pd):
     # Sample from the conditional on P_i, take average loss across one test point, then across entire hold out set
     # TODO sample from this distribution and visualize it in TSNE versus an actual data point
     avg = 0
-    for i in range(N):
-        n = Pt[i].shape
-        dist = UnitMvNormal(x)('test {}'.format(i), mu=beta[0] * Gt[i] + beta[1] * Ct[i], cov=identity(n), shape=n)
-        avg += exp(dist.logp(Pt[i]))
+    for i in range(min(Pt.shape[0], N)):
+        n, = Pt[i,:N].shape
+        dist = UnitMvNormal(n).dist(mu=beta[0] * Gt[i,:N] + beta[1] * Ct[i,:N], cov=identity(n), shape=n)
+        avg += exp(dist.logp(tt.tensor._shared(Pt[i,:N])).eval())
 
     print("Avg likelihood: {}".format(avg / N))
