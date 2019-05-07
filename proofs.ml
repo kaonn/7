@@ -58,6 +58,13 @@ module IntS = Set.Make(
     let compare = Pervasives.compare
     type t = int
   end)
+
+module IntM = Map.Make( 
+  struct
+    let compare = Pervasives.compare
+    type t = int
+  end)
+
     
 let constant_index = 
   let m = ref M.empty in
@@ -94,10 +101,10 @@ let mk_node id nt str fmt : int * int * int =
   | OH -> 
     begin
     match nt with 
-    | N_VAR -> if str = "" then raise (Fail "empty string") else (id,0,String.get str 0 |> Char.code) 
-    | N_TYVAR -> if str = "" then raise (Fail "empty string") else (id,4,String.get str 0 |> Char.code) 
-    | N_TYAPP -> if str = "" then raise (Fail "empty string") else (id,5,find' str (!constant_index))
-    | N_CONST -> (id,1,find' str (!constant_index))
+    | N_VAR -> if str = "" then raise (Fail "empty string") else (id,0,(String.get str 0 |> Char.code) + 6) 
+    | N_TYVAR -> if str = "" then raise (Fail "empty string") else (id,4,(String.get str 0 |> Char.code) + 6) 
+    | N_TYAPP -> if str = "" then raise (Fail "empty string") else (id,5,(find' str (!constant_index)) + 6)
+    | N_CONST -> (id,1,find' str (!constant_index) + 6)
     | N_COMB -> (id,2,2)
     | N_ABS -> (id,3,3)
     end
@@ -106,8 +113,8 @@ let mk_node id nt str fmt : int * int * int =
     match nt with 
     | N_VAR -> if str = "" then raise (Fail "empty string") else (id,0,(String.get str 0 |> Char.code) + 6) 
     | N_TYVAR -> if str = "" then raise (Fail "empty string") else (id,4,(String.get str 0 |> Char.code) + 6) 
-    | N_TYAPP -> if str = "" then raise (Fail "empty string") else (id,5,(find' str (!constant_index)) + 32)
-    | N_CONST -> (id,1,(find' str (!constant_index)) + 32)
+    | N_TYAPP -> if str = "" then raise (Fail "empty string") else (id,5,(find' str (!constant_index)) + 6)
+    | N_CONST -> (id,1,(find' str (!constant_index)) + 6)
     | N_COMB -> (id,2,-1)
     | N_ABS -> (id,3,-1)
   end
@@ -280,7 +287,12 @@ let flip which =
   | Train -> TrainPremise
   | Test -> TestPremise
 
-let rec matrify index proof which fmt prob side (dataref : (('a, 'b, 'c) data) ref) =
+let check_label i targets thresh = 
+  let t = !targets in 
+  if (IntM.find i t) > thresh then raise (Fail ("too many labels" ^ string_of_int i))
+  else ()
+
+let rec matrify targets thresh index proof which fmt prob side (dataref : (('a, 'b, 'c) data) ref) =
   let data = !dataref in
   let mnn = data.mAX_NUM_NODES in
   let goals, goals_nodes, meta, contexts, contexts_nodes = 
@@ -294,12 +306,17 @@ let rec matrify index proof which fmt prob side (dataref : (('a, 'b, 'c) data) r
   let Proof(idx,thm,content) = proof in
   let asl,tm = dest_thm thm in
   let _ = check_ctx asl in 
+  let _ = 
+    match which with 
+    | Test | Train -> check_label (label content) targets thresh
+    | _ -> () 
+  in
   let _ =  
     match prob with 
     | GEN ->
       let premises = check_content content in 
       List.iteri (
-        fun i p -> let _ = matrify index p (flip which) OH CL i dataref in ()
+        fun i p -> let _ = matrify targets thresh index p (flip which) OH CL i dataref in ()
       ) premises
     | _ -> () in 
   let len = List.length asl in
@@ -377,7 +394,7 @@ let rec matrify index proof which fmt prob side (dataref : (('a, 'b, 'c) data) r
                   match which with 
                   | Test | Train -> 
                     Bigarray.Genarray.set contexts_nodes [|index; l; i; j|] 1;
-                    Bigarray.Genarray.set contexts_nodes [|index; l; i; k|] 1
+		    Bigarray.Genarray.set goals_nodes [|index; i; k|] 1
                   | _ -> 
                     Bigarray.Genarray.set contexts_nodes [|index; side; l; i; j|] 1;
                     Bigarray.Genarray.set contexts_nodes [|index; side; l; i; k|] 1
@@ -399,23 +416,30 @@ let rec matrify index proof which fmt prob side (dataref : (('a, 'b, 'c) data) r
                         ) !nodes 
         in
       Some(
+        let _ = 
         List.iteri (fun l tm -> 
         let _ =  Printf.printf "ctx\n" in
         let sizei,_ = term_node tm fmt mnn (ctx_cc l) in
         match which with 
           | Train | Test -> Bigarray.Genarray.set meta [|index;(l + 2)|] sizei
           | _ -> Bigarray.Genarray.set meta [|index;side;(l + 2)|] sizei
-          ) asl
+          ) asl 
+        in
+        let n = IntM.find (label content) !targets in
+        let _ = targets := IntM.add (label content) (n+1) !targets in 
+        ()
         )
-  with (Fail msg) -> let _ = Printf.printf "%s\n" msg in None
-     | Not_found ->  let _ = Printf.printf "fdaa" in None
+  with (Fail msg) -> None
+     | Not_found ->  None
 
-let gen_data (fmt : data_format) = 
-  let _ = Random.init 0 in
+let gen_data (fmt : data_format) (n,m) (n1,m1) = 
+  let _ = Random.init 400000 in
   let num_succ = ref 0 in
-  let dataref = ref (alloc fmt false) in
+  let dataref = ref (alloc fmt (n,m) (n1,m1)) in
   let n = (!dataref).nUM_TRAINING in 
   let m = (!dataref).nUM_TEST in 
+  let targets = ref (IntM.of_seq (List.to_seq [(0,0);(1,0);(2,0);(3,0);(4,0);(5,0);(6,0);(7,0);(8,0);(9,0);(10,0);(11,0);(12,0)])) in
+  let thresh = n/7 + 1 in
   let seen = ref IntS.empty in
     while !num_succ <  n do 
       let i = Random.int 12576083 in
@@ -426,12 +450,14 @@ let gen_data (fmt : data_format) =
         let _ =  Printf.printf "#succ: %d\n" (!num_succ) in 
         try
         let p = proof_at i in 
-        match matrify !num_succ p Train fmt GEN (-1) (dataref) with
+        match matrify targets thresh !num_succ p Train fmt CL (-1) (dataref) with
         | Some () -> num_succ := !num_succ + 1
         | _ -> ()
         with Not_found -> ()
     done
   ;
+    let targets' = ref (IntM.of_seq (List.to_seq [(0,0);(1,0);(2,0);(3,0);(4,0);(5,0);(6,0);(7,0);(8,0);(9,0);(10,0);(11,0);(12,0)])) in
+    let thresh' = m/7 + 1 in
     num_succ := 0;
     while !num_succ <  m do 
       let i = Random.int 12576083 in
@@ -442,7 +468,7 @@ let gen_data (fmt : data_format) =
         let _ =  Printf.printf "#succ: %d\n" (!num_succ) in 
         try
         let p = proof_at i in 
-        match matrify !num_succ p Test fmt GEN (-1) dataref with
+        match matrify targets' thresh' !num_succ p Test fmt CL (-1) dataref with
         | Some () -> num_succ := !num_succ + 1
         | _ -> ()
         with Not_found -> ()

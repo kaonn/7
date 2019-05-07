@@ -39,21 +39,23 @@ type ('a, 'b, 'c) data =
     test_premise_meta : ('a, 'b, 'c) Bigarray.Genarray.t ;
   }
 
-let alloc dformat b = 
+let alloc dformat (n,m) (n1,m1) = 
   match dformat with 
   | OH -> 
-    let mAX_NUM_NODES = 100 in 
+    let mAX_NUM_NODES = 200 in 
     let mAX_CONTEXT_LEN = 5 in 
-    let nUM_TRAINING = 5000 in 
-    let nUM_TEST = 2000 in
+    let nUM_TRAINING = n in 
+    let nUM_TEST = m in
+    let nUM_PREMISE_TRAINING = n1 in
+    let nUM_PREMISE_TEST = m1 in
     let training_contexts =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; mAX_CONTEXT_LEN; mAX_NUM_NODES; mAX_NUM_NODES|] in 
     let training_contexts_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; mAX_CONTEXT_LEN; mAX_NUM_NODES; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; mAX_CONTEXT_LEN; mAX_NUM_NODES; 304|] in
     let training_goals =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; mAX_NUM_NODES; mAX_NUM_NODES|] in
     let training_goals_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; mAX_NUM_NODES; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; mAX_NUM_NODES; 304|] in
     let training_meta =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 7|] in 
     let training_labels =
@@ -69,15 +71,15 @@ let alloc dformat b =
     in 
 
     let training_premise_contexts =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 2; mAX_CONTEXT_LEN; mAX_NUM_NODES; mAX_NUM_NODES|] in 
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_PREMISE_TRAINING; 2; mAX_CONTEXT_LEN; mAX_NUM_NODES; mAX_NUM_NODES|] in 
     let training_premise_contexts_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 2; mAX_CONTEXT_LEN; mAX_NUM_NODES; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_PREMISE_TRAINING; 2; mAX_CONTEXT_LEN; mAX_NUM_NODES; 304|] in
     let training_premise_goals =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 2; mAX_NUM_NODES; mAX_NUM_NODES|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_PREMISE_TRAINING; 2; mAX_NUM_NODES; mAX_NUM_NODES|] in
     let training_premise_goals_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 2; mAX_NUM_NODES; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_PREMISE_TRAINING; 2; mAX_NUM_NODES; 304|] in
     let training_premise_meta =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 2; 7|]in 
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_PREMISE_TRAINING; 2; 7|]in 
 
     let _ = 
       Bigarray.Genarray.fill training_premise_contexts (0);
@@ -90,11 +92,11 @@ let alloc dformat b =
     let test_contexts =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; mAX_CONTEXT_LEN; mAX_NUM_NODES; mAX_NUM_NODES|] in 
     let test_contexts_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; mAX_CONTEXT_LEN; mAX_NUM_NODES; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; mAX_CONTEXT_LEN; mAX_NUM_NODES; 304|] in
     let test_goals =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; mAX_NUM_NODES; mAX_NUM_NODES|] in
     let test_goals_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; mAX_NUM_NODES; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; mAX_NUM_NODES; 304|] in
     let test_meta =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; 7|] in
     let test_labels =
@@ -110,15 +112,15 @@ let alloc dformat b =
     in 
 
     let test_premise_contexts =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; 2; mAX_CONTEXT_LEN; mAX_NUM_NODES; mAX_NUM_NODES|] in 
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_PREMISE_TEST; 2; mAX_CONTEXT_LEN; mAX_NUM_NODES; mAX_NUM_NODES|] in 
     let test_premise_contexts_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; 2; mAX_CONTEXT_LEN; mAX_NUM_NODES; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_PREMISE_TEST; 2; mAX_CONTEXT_LEN; mAX_NUM_NODES; 304|] in
     let test_premise_goals =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; 2; mAX_NUM_NODES; mAX_NUM_NODES|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_PREMISE_TEST; 2; mAX_NUM_NODES; mAX_NUM_NODES|] in
     let test_premise_goals_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; 2; mAX_NUM_NODES; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_PREMISE_TEST; 2; mAX_NUM_NODES; 304|] in
     let test_premise_meta =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; 2; 7|] in 
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_PREMISE_TEST; 2; 7|] in 
 
     let _ = 
       Bigarray.Genarray.fill test_premise_contexts (0);
@@ -168,11 +170,11 @@ let alloc dformat b =
     let training_contexts =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; mAX_CONTEXT_LEN; mAX_NUM_NODES; mAX_NUM_NODES|] in 
     let training_contexts_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; mAX_CONTEXT_LEN; mAX_NUM_NODES; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; mAX_CONTEXT_LEN; mAX_NUM_NODES; 304|] in
     let training_goals =
       Bigarray.Array3.create Bigarray.Int8_unsigned Bigarray.C_layout nUM_TRAINING mAX_NUM_NODES mAX_NUM_NODES in
     let training_goals_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; mAX_NUM_NODES; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; mAX_NUM_NODES; 304|] in
     let training_meta =
       Bigarray.Array2.create Bigarray.Int8_unsigned Bigarray.C_layout nUM_TRAINING 7 in 
     let training_labels =
@@ -189,11 +191,11 @@ let alloc dformat b =
     let test_contexts =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; mAX_CONTEXT_LEN; mAX_NUM_NODES; mAX_NUM_NODES|] in 
     let test_contexts_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; mAX_CONTEXT_LEN; mAX_NUM_NODES; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; mAX_CONTEXT_LEN; mAX_NUM_NODES; 304|] in
     let test_goals =
       Bigarray.Array3.create Bigarray.Int8_unsigned Bigarray.C_layout nUM_TEST mAX_NUM_NODES mAX_NUM_NODES in
     let test_goals_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; mAX_NUM_NODES; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; mAX_NUM_NODES; 304|] in
     let test_meta =
       Bigarray.Array2.create Bigarray.Int8_unsigned Bigarray.C_layout nUM_TEST 7 in
     let test_labels =
@@ -226,7 +228,6 @@ let alloc dformat b =
       test_meta = test_meta;
       test_labels =test_labels;
     }
-     *)
   | BON ->
     let mAX_NUM_NODES = 100 in 
     let mAX_CONTEXT_LEN = 5 in 
@@ -235,11 +236,11 @@ let alloc dformat b =
     let training_contexts =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; mAX_NUM_NODES; mAX_NUM_NODES|] in 
     let training_contexts_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 304|] in
     let training_goals =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING;mAX_NUM_NODES;mAX_NUM_NODES|] in
     let training_goals_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 304|] in
     let training_meta =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 7|] in 
     let training_labels =
@@ -257,11 +258,11 @@ let alloc dformat b =
     let training_premise_contexts =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 2; mAX_CONTEXT_LEN; mAX_NUM_NODES; mAX_NUM_NODES|] in 
     let training_premise_contexts_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 2; mAX_CONTEXT_LEN; mAX_NUM_NODES; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 2; mAX_CONTEXT_LEN; mAX_NUM_NODES; 304|] in
     let training_premise_goals =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 2; mAX_NUM_NODES; mAX_NUM_NODES|] in
     let training_premise_goals_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 2; mAX_NUM_NODES; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 2; mAX_NUM_NODES; 304|] in
     let training_premise_meta =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TRAINING; 2; 7|]in 
 
@@ -276,11 +277,11 @@ let alloc dformat b =
     let test_contexts =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; mAX_NUM_NODES; mAX_NUM_NODES|] in 
     let test_contexts_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST;  329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST;  304|] in
     let test_goals =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST;mAX_NUM_NODES; mAX_NUM_NODES|] in
     let test_goals_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; 304|] in
     let test_meta =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; 7|] in
     let test_labels =
@@ -298,11 +299,11 @@ let alloc dformat b =
     let test_premise_contexts =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; 2; mAX_CONTEXT_LEN; mAX_NUM_NODES; mAX_NUM_NODES|] in 
     let test_premise_contexts_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; 2; mAX_CONTEXT_LEN; mAX_NUM_NODES; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; 2; mAX_CONTEXT_LEN; mAX_NUM_NODES; 304|] in
     let test_premise_goals =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; 2; mAX_NUM_NODES; mAX_NUM_NODES|] in
     let test_premise_goals_nodes =
-      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; 2; mAX_NUM_NODES; 329|] in
+      Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; 2; mAX_NUM_NODES; 304|] in
     let test_premise_meta =
       Bigarray.Genarray.create Bigarray.Int8_unsigned Bigarray.C_layout [|nUM_TEST; 2; 7|] in 
 
@@ -411,5 +412,6 @@ let alloc dformat b =
       test_meta = test_meta;
       test_labels =test_labels;
     }
+     *)
      *)
 
