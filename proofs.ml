@@ -101,10 +101,10 @@ let mk_node id nt str fmt : int * int * int =
   | OH -> 
     begin
     match nt with 
-    | N_VAR -> if str = "" then raise (Fail "empty string") else (id,0,String.get str 0 |> Char.code) 
-    | N_TYVAR -> if str = "" then raise (Fail "empty string") else (id,4,String.get str 0 |> Char.code) 
-    | N_TYAPP -> if str = "" then raise (Fail "empty string") else (id,5,find' str (!constant_index))
-    | N_CONST -> (id,1,find' str (!constant_index))
+    | N_VAR -> if str = "" then raise (Fail "empty string") else (id,0,(String.get str 0 |> Char.code) + 6) 
+    | N_TYVAR -> if str = "" then raise (Fail "empty string") else (id,4,(String.get str 0 |> Char.code) + 6) 
+    | N_TYAPP -> if str = "" then raise (Fail "empty string") else (id,5,(find' str (!constant_index)) + 6)
+    | N_CONST -> (id,1,find' str (!constant_index) + 6)
     | N_COMB -> (id,2,2)
     | N_ABS -> (id,3,3)
     end
@@ -113,8 +113,8 @@ let mk_node id nt str fmt : int * int * int =
     match nt with 
     | N_VAR -> if str = "" then raise (Fail "empty string") else (id,0,(String.get str 0 |> Char.code) + 6) 
     | N_TYVAR -> if str = "" then raise (Fail "empty string") else (id,4,(String.get str 0 |> Char.code) + 6) 
-    | N_TYAPP -> if str = "" then raise (Fail "empty string") else (id,5,(find' str (!constant_index)) + 32)
-    | N_CONST -> (id,1,(find' str (!constant_index)) + 32)
+    | N_TYAPP -> if str = "" then raise (Fail "empty string") else (id,5,(find' str (!constant_index)) + 6)
+    | N_CONST -> (id,1,(find' str (!constant_index)) + 6)
     | N_COMB -> (id,2,-1)
     | N_ABS -> (id,3,-1)
   end
@@ -289,7 +289,7 @@ let flip which =
 
 let check_label i targets thresh = 
   let t = !targets in 
-  if (IntM.find i t) > thresh then raise (Fail "too many labels")
+  if (IntM.find i t) > thresh then raise (Fail ("too many labels" ^ string_of_int i))
   else ()
 
 let rec matrify targets thresh index proof which fmt prob side (dataref : (('a, 'b, 'c) data) ref) =
@@ -394,7 +394,7 @@ let rec matrify targets thresh index proof which fmt prob side (dataref : (('a, 
                   match which with 
                   | Test | Train -> 
                     Bigarray.Genarray.set contexts_nodes [|index; l; i; j|] 1;
-                    Bigarray.Genarray.set contexts_nodes [|index; l; i; k|] 1
+		    Bigarray.Genarray.set goals_nodes [|index; i; k|] 1
                   | _ -> 
                     Bigarray.Genarray.set contexts_nodes [|index; side; l; i; j|] 1;
                     Bigarray.Genarray.set contexts_nodes [|index; side; l; i; k|] 1
@@ -429,8 +429,8 @@ let rec matrify targets thresh index proof which fmt prob side (dataref : (('a, 
         let _ = targets := IntM.add (label content) (n+1) !targets in 
         ()
         )
-  with (Fail msg) -> let _ = Printf.printf "%s\n" msg in None
-     | Not_found ->  let _ = Printf.printf "fdaa" in None
+  with (Fail msg) -> None
+     | Not_found ->  None
 
 let gen_data (fmt : data_format) (n,m) (n1,m1) = 
   let _ = Random.init 400000 in
@@ -439,7 +439,7 @@ let gen_data (fmt : data_format) (n,m) (n1,m1) =
   let n = (!dataref).nUM_TRAINING in 
   let m = (!dataref).nUM_TEST in 
   let targets = ref (IntM.of_seq (List.to_seq [(0,0);(1,0);(2,0);(3,0);(4,0);(5,0);(6,0);(7,0);(8,0);(9,0);(10,0);(11,0);(12,0)])) in
-  let thresh = n/13 + 1 in
+  let thresh = n/7 + 1 in
   let seen = ref IntS.empty in
     while !num_succ <  n do 
       let i = Random.int 12576083 in
@@ -456,7 +456,8 @@ let gen_data (fmt : data_format) (n,m) (n1,m1) =
         with Not_found -> ()
     done
   ;
-    let thresh' = n1/13 + 1 in
+    let targets' = ref (IntM.of_seq (List.to_seq [(0,0);(1,0);(2,0);(3,0);(4,0);(5,0);(6,0);(7,0);(8,0);(9,0);(10,0);(11,0);(12,0)])) in
+    let thresh' = m/7 + 1 in
     num_succ := 0;
     while !num_succ <  m do 
       let i = Random.int 12576083 in
@@ -467,7 +468,7 @@ let gen_data (fmt : data_format) (n,m) (n1,m1) =
         let _ =  Printf.printf "#succ: %d\n" (!num_succ) in 
         try
         let p = proof_at i in 
-        match matrify targets thresh' !num_succ p Test fmt CL (-1) dataref with
+        match matrify targets' thresh' !num_succ p Test fmt CL (-1) dataref with
         | Some () -> num_succ := !num_succ + 1
         | _ -> ()
         with Not_found -> ()
