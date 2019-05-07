@@ -1,25 +1,50 @@
 import pymc3 as pm
-from numpy import zeros, ones, identity, multiply, inf, any, exp
+from numpy import zeros, ones, zeros_like, ones_like, identity, multiply, log
 from numpy.linalg import inv
 from data import Gd, Cd, Pd, y, Gt, Ct, Pt, yt, data_for_rule
-from scipy.stats import truncnorm
+
 import theano.tensor as tt
+from theano.tensor import _shared as te
+from theano.compile.ops import as_op
+
+#from scipy.stats import multivariate_normal as mvn
+from scipy.integrate import nquad
 
 m = 2
-BOUND = 0
 
-def UnitMvNormal(*args, **kwargs):
-    v = pm.MvNormal(*args, **kwargs)
-    global BOUND
-    pm.Potential("bound {}".format(BOUND), tt.switch(multiply.reduce(multiply(0 <= v, v <= 1)), 0, -inf))
-    BOUND += 1
-    return v
+#def tzip(a, b):
+#    return list((a[i], b[i]) for i in range(a.shape[0]))
 
-def UMvNormal_logp(x, mean, C):
-    if any(x < 0) or any(x > 1):
-        return -inf
-    else:
-        return -0.5*(x-mean).dot(inv(C)).dot(x-mean)
+# Truncated multivariate normal distribution (TMvN)
+@as_op(itypes=[tt.dvector, tt.dvector, tt.dmatrix, tt.dvector, tt.dvector], otypes=[tt.dscalar])
+def TMvNormal_pdf(x, mu, cov, a, b):
+    #if any(x < a - eps) or any(x > b + eps): return 0
+    # Unnormalized MvNormal pdf
+    def updf(x):
+        dx = x - mu
+        return exp((-1 / 2) * dx.T.dot(inv(cov).dot(dx)))
+    #pdf = lambda x: mvn.pdf(x, mu=mu, cov=cov)
+    return updf(x) / nquad(updf, zip(a, b))
+
+@as_op(itypes=[tt.dvector, tt.dvector, tt.dmatrix, tt.dvector, tt.dvector], otypes=[tt.dscalar])
+def TMvNormal_cdf(X, mu, cov, a, b):
+    return nquad(lambda x: TMvNormal_pdf(x, mu, cov, a, b), zip(zeros_like(a), X))
+
+# Discretization trick
+def DTMvNormal_pdf(x, mu, cov, a, b):
+    cdf = lambda x: TMvNormal_cdf(x, mu, cov, a, b)
+    return cdf(x + ones_like(x)) - cdf(x)
+
+def DTMvNormal(name, mu, cov, a, b, **kwargs):
+    return pm.DensityDist(name, logp=lambda x: log(DTMvNormal_pdf((x), (mu), (cov), (a), (b))), **kwargs)
+
+# Unit DTMvN
+def UDTMvNormal(name, mu, cov, **kwargs):
+    n, = mu.shape
+    return DTMvNormal(name, mu, cov, zeros(n), ones(n), **kwargs)
+
+def UDTMvNormal_pdf(x, mu, cov):
+    return DTMvNormal_pdf(x, mu, cov, zeros_like(x), ones_like(x))
 
 def make_model(Gd, Cd, *P):
     n, = Gd[0].shape
@@ -34,9 +59,9 @@ def make_model(Gd, Cd, *P):
 
         # Results are degree of adjacency
         for i, Pi in enumerate(P):
-            beta_i = UnitMvNormal('beta {}'.format(i), mu=zeros(m), cov=identity(m), shape=m)
+            beta_i = UDTMvNormal('beta {}'.format(i), mu=zeros(m), cov=identity(m), shape=m)
 
-            UnitMvNormal('premise {}'.format(i), mu=beta_i[0] * Gamma + beta_i[1] * C, \
+            UDTMvNormal('premise {}'.format(i), mu=beta_i[0] * Gamma + beta_i[1] * C, \
                         cov=identity(n), shape=n, observed=Pi)
 
         return model
@@ -45,10 +70,10 @@ RULE = zeros((13,))
 RULE[1] = 1
 Gd, Cd, Pd = data_for_rule(RULE, Gd, Cd, Pd, y)
 Gt, Ct, Pt = data_for_rule(RULE, Gt, Ct, Pt, yt)
-M1 = min(Gd.shape[0], 1000)
-N1 = min(Gd.shape[1], 10000)
-M2 = min(Gt.shape[0], 1000)
-N2 = min(Gt.shape[1], 10000)
+M1 = min(Gd.shape[0], 10)
+N1 = min(Gd.shape[1], 10)
+M2 = min(Gt.shape[0], 10)
+N2 = min(Gt.shape[1], 10)
 
 Gd = Gd[:M1,:N1]
 Cd = Cd[:M1,:N1]
@@ -59,7 +84,7 @@ Pt = Pt[:M2,:N2]
 
 with make_model(Gd, Cd, Pd):
     # Solve the MAP estimate
-    params = pm.find_MAP()
+    params = pm.sample()
     beta = params['beta 0']
 
     # Sample from the conditional on P_i, take average loss across one test point, then across entire hold out set
@@ -67,6 +92,6 @@ with make_model(Gd, Cd, Pd):
     avg = 0
     for i in range(M2):
         n, = Pt[i].shape
-        avg += exp(UMvNormal_logp(Pt[i], beta[0] * Gt[i] + beta[1] * Ct[i], identity(n)))
+        avg += UDTMvNormal_pdf(Pt[i], beta[0] * Gt[i] + beta[1] * Ct[i], identity(n))
 
     print("Avg likelihood: {}".format(avg / M2))
